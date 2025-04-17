@@ -1,0 +1,1370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <script src="https://unpkg.com/ccxt@4.3.33/dist/ccxt.browser.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"></script>
+  <title>Crypto Coin Dashboard - Calc Display</title>
+  <style>
+    /* --- Base Styles --- */
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(to right, #e0ffe4, #d0f8ff); margin: 0; padding: 0; color: #333; padding-top: 70px; }
+    header { background-color: #00c07d; color: white; padding: 15px 20px; text-align: center; z-index: 99; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+    header h1 { margin: 0 0 10px 0; font-size: 26px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 5px 10px; }
+    header h1 img { width: 28px; height: 28px; vertical-align: middle; }
+    .stats { margin-top: 10px; display: flex; justify-content: center; flex-wrap: wrap; gap: 15px 30px; font-size: 14px; }
+    .stats div { background-color: rgba(255, 255, 255, 0.2); padding: 5px 10px; border-radius: 5px; white-space: nowrap; }
+    /* Style for indicating stale data in header */
+    .stats.stale div { opacity: 0.7; border: 1px dashed rgba(255,255,255,0.5); }
+    .stats.stale::after { content: "(Data may be outdated)"; display: block; width: 100%; font-size: 11px; color: rgba(255, 255, 255, 0.8); margin-top: 5px; }
+
+    #refresh-btn { display: block; margin: 25px auto; background-color: #00c07d; color: white; border: none; padding: 12px 25px; font-size: 16px; font-weight: bold; border-radius: 25px; cursor: pointer; transition: background-color 0.3s, transform 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    #refresh-btn:hover { background-color: #008f5f; transform: translateY(-2px); }
+    #refresh-btn:active { transform: translateY(0px); }
+    #refresh-btn:disabled { background-color: #aaa; cursor: not-allowed; }
+    .section { display: flex; justify-content: space-around; flex-wrap: wrap; margin: 30px 15px; gap: 20px; }
+    .section + .section { margin-top: 40px; }
+    .exchange-column { width: 100%; max-width: 450px; background-color: rgba(255, 255, 255, 0.7); padding: 15px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); flex-grow: 1; min-width: 280px; }
+    .exchange-column h2 { text-align: center; font-size: 18px; color: #004d33; margin-top: 0; margin-bottom: 15px; border-bottom: 1px solid #00c07d; padding-bottom: 8px; }
+    .exchange-small { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; background-color: white; padding: 8px 10px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.05); transition: all 0.2s ease-in-out; border-left: 4px solid transparent; border: 2px solid transparent; }
+    .exchange-small:hover { box-shadow: 0 4px 12px rgba(0, 192, 125, 0.3); transform: translateX(3px); }
+    .exchange-small.clickable-price-entry { cursor: pointer; }
+    .exchange-small.highest { border-left-color: #ff9900; } .exchange-small.lowest { border-left-color: #4CAF50; } .exchange-small.usdt-highest { border-left-color: #f0ad4e; } .exchange-small.usdt-lowest { border-left-color: #5cb85c; }
+    .exchange-small img { width: 24px; height: 24px; object-fit: contain; border-radius: 50%; background-color: #f0f0f0; flex-shrink: 0; pointer-events: none; }
+    .exchange-small .info { flex-grow: 1; font-size: 13px; line-height: 1.4; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; pointer-events: none; }
+    .exchange-small .info .exchange-name { font-weight: bold; color: #006f48; display: block; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+    .exchange-small .info .pair-price { color: #555; font-size: 12px; pointer-events: none; }
+    .exchange-small .price-value { font-weight: bold; font-size: 14px; color: #007bff; text-align: right; white-space: nowrap; margin-left: 5px; pointer-events: none; }
+    #exchange-list-container h3 { text-align:center; color:#004d33; margin-top: 10px; margin-bottom: 20px; font-size: 20px; }
+    #exchange-list { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; padding: 0 15px 30px 15px; }
+    #exchange-list .exchange-card { background-color: #ffffff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px; width: 110px; display: flex; flex-direction: column; align-items: center; text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,0.07); transition: all 0.2s ease-in-out; border: 2px solid transparent; }
+    #exchange-list .exchange-card.clickable-price-entry { cursor: pointer; }
+    #exchange-list .exchange-card:hover { transform: translateY(-3px); box-shadow: 0 4px 10px rgba(0, 192, 125, 0.25); }
+    #exchange-list .exchange-logo { width: 30px; height: 30px; object-fit: contain; margin-bottom: 6px; border-radius: 50%; background: #f5f5f5; pointer-events: none; }
+    #exchange-list .exchange-name { font-weight: bold; color: #006f48; font-size: 12px; margin-bottom: 3px; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+    #exchange-list .pair { font-size: 10px; color: #666; margin-bottom: 5px; pointer-events: none; }
+    #exchange-list .price { font-size: 13px; font-weight: bold; color: #ff9900; white-space: nowrap; pointer-events: none; }
+    .loading-message, .error-message { color: #555; text-align: center; font-weight: bold; margin-top: 20px; padding: 15px; background-color: rgba(255, 255, 255, 0.8); border-radius: 8px; display: inline-block; }
+    .error-message { color: #dc3545; background-color: rgba(255, 220, 220, 0.9); }
+    .center-message { text-align: center; width: 100%; margin-top: 20px; }
+
+    /* --- Styles for Calculator Details & CCXT --- */
+    #profit-loss-container { text-align: center; margin: 25px 15px 15px 15px; padding: 15px; background-color: rgba(255, 255, 255, 0.9); border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); display: none; border: 1px solid #00c07d; font-size: 14px; line-height: 1.6; }
+    #profit-loss-container h2 { margin-top: 0; margin-bottom: 12px; font-size: 18px; color: #004d33; font-weight: 600; }
+    #profitLossResult { margin-bottom: 12px; min-height: 100px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    #reset-selection-btn { margin-top: 10px; padding: 8px 18px; background-color: #ff6b6b; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; font-weight: 500; transition: background-color 0.2s, transform 0.1s; }
+    #reset-selection-btn:hover { background-color: #e55a5a; } #reset-selection-btn:active { transform: translateY(1px); }
+    .clickable-price-entry.selected-buy { border: 2px solid #4CAF50 !important; box-shadow: 0 0 8px rgba(76, 175, 80, 0.5) !important; transform: scale(1.02) translateY(-1px) !important; }
+    .clickable-price-entry.selected-sell { border: 2px solid #f44336 !important; box-shadow: 0 0 8px rgba(244, 67, 54, 0.5) !important; transform: scale(1.02) translateY(-1px) !important; }
+    .order-book-viz { width: 90%; height: 10px; background: linear-gradient(to right, #90ee90 50%, #ffcccb 50%); margin: 5px auto 0 auto; border: 1px solid #ccc; position: relative; overflow: hidden; border-radius: 3px; }
+    .order-book-viz.unavailable { background: #eee; }
+    .details-row { font-size: 0.85em; color: #555; text-align: left; margin: 3px 5%; display: flex; justify-content: space-between; align-items: center; }
+    .details-row .label { font-weight: bold; color: #333; margin-right: 5px; flex-basis: 45%; text-align: right; }
+    .details-row .value { flex-grow: 1; text-align: left; word-break: break-all; }
+    .loading-spinner { display: inline-block; border: 2px solid #f3f3f3; border-top: 2px solid #00c07d; border-radius: 50%; width: 10px; height: 10px; animation: spin 1s linear infinite; margin-left: 5px; vertical-align: middle; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    .example-value { color: #666; font-style: italic; }
+    .summary-note { font-size: 0.8em; color: #888; margin-top: 8px; }
+
+    /* --- Coin Selector Styles --- */
+    #coin-selector-container {
+        position: fixed; top: 0; left: 0; width: 100%; background-color: #f0f8ff; padding: 10px 15px; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); z-index: 101; display: flex; align-items: center; gap: 10px; box-sizing: border-box;
+    }
+    #coin-selector-container label { font-weight: bold; color: #004d33; font-size: 14px; flex-shrink: 0; }
+    #coin-search-wrapper { position: relative; flex-grow: 1; }
+    #coin-search {
+        width: 100%; padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; box-sizing: border-box; transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    #coin-search:focus { border-color: #00c07d; box-shadow: 0 0 0 2px rgba(0, 192, 125, 0.2); outline: none; }
+    #coin-search:disabled { background-color: #eee; cursor: not-allowed; }
+    #coin-suggestions {
+        position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #ccc; border-top: none; max-height: 300px; overflow-y: auto; z-index: 102; box-shadow: 0 4px 6px rgba(0,0,0,0.1); display: none; list-style: none; margin: 0; padding: 0; border-radius: 0 0 4px 4px;
+    }
+    .suggestion-item { display: flex; align-items: center; padding: 6px 12px; cursor: pointer; border-bottom: 1px solid #eee; }
+    .suggestion-item:last-child { border-bottom: none; }
+    .suggestion-item:hover { background-color: #f0f0f0; }
+    .suggestion-item img { width: 20px; height: 20px; margin-right: 10px; border-radius: 50%; object-fit: contain; flex-shrink: 0; background-color: #f5f5f5; }
+    .suggestion-item .coin-name { font-weight: 500; color: #333; margin-right: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .suggestion-item .coin-symbol { font-size: 0.9em; color: #777; text-transform: uppercase; white-space: nowrap; }
+    .suggestion-item.loading, .suggestion-item.no-results { justify-content: center; font-style: italic; color: #888; padding: 10px; cursor: default; }
+    .suggestion-item.no-results:hover { background-color: transparent; }
+    #coin-selector-status { font-size: 13px; color: #004d33; margin-left: 10px; font-weight: 500; flex-shrink: 0; white-space: nowrap; transition: color 0.3s; }
+    #coin-selector-status.error { color: #dc3545; }
+
+    /* Media Queries */
+    @media (max-width: 900px) { .exchange-column { max-width: 48%; } }
+    @media (max-width: 600px) {
+        body { padding-top: 90px; }
+        #coin-selector-container { flex-wrap: wrap; padding: 10px; }
+        #coin-search-wrapper { width: calc(100% - 50px); order: 2; }
+        #coin-selector-container label { order: 1; }
+        #coin-selector-status { order: 3; width: 100%; text-align: center; margin: 5px 0 0 0; }
+        #coin-suggestions { left: 0; right: 0; width: 100%; }
+        .exchange-column { max-width: 100%; min-width: unset; } header h1 { font-size: 22px; } .stats { gap: 10px 20px; font-size: 13px;}
+    }
+    @media (max-width: 480px) {
+        header h1 { font-size: 20px; } .stats div { padding: 4px 8px; } #refresh-btn { padding: 10px 20px; font-size: 15px;} #exchange-list .exchange-card { width: 100px; } #exchange-list .exchange-logo { width: 25px; height: 25px;} #exchange-list .price { font-size: 12px;} #profit-loss-container { font-size: 13px; } #profit-loss-container h2 { font-size: 16px; } #reset-selection-btn { font-size: 13px; padding: 7px 15px; }
+        #coin-search-wrapper { width: calc(100% - 45px); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Coin Selector Section -->
+  <div id="coin-selector-container">
+    <label for="coin-search">Coin:</label>
+    <div id="coin-search-wrapper">
+        <input type="text" id="coin-search" placeholder="Search coins (e.g., bitcoin, eth)" autocomplete="off">
+        <ul id="coin-suggestions"></ul>
+    </div>
+    <span id="coin-selector-status"></span>
+  </div>
+
+  <header>
+    <h1 id="dashboard-title">Loading Dashboard...</h1>
+    <!-- Added stats-container ID -->
+    <div id="stats-container" class="stats">
+      <div id="livePrice">Price: Loading...</div>
+      <div id="marketCap">Market Cap: Loading...</div>
+      <div id="totalSupply">Circ. Supply: Loading...</div>
+      <div id="priceChange24h">24h Change: Loading...</div>
+    </div>
+  </header>
+
+  <button id="refresh-btn" onclick="fetchCoinData(currentCoinId, false)">
+      <span class="icon">🔁</span> Refresh Now
+  </button>
+
+  <!-- Rest of the body structure remains the same -->
+  <div class="section">
+    <div class="exchange-column">
+      <h2>🔼 Top 5 Highest Price (All Pairs)</h2>
+      <div id="highest-prices" class="price-list-container"><div class="center-message"><span class="loading-message">Loading...</span></div></div>
+    </div>
+    <div class="exchange-column">
+      <h2>🔽 Top 5 Lowest Price (All Pairs)</h2>
+      <div id="lowest-prices" class="price-list-container"><div class="center-message"><span class="loading-message">Loading...</span></div></div>
+    </div>
+  </div>
+  <div class="section">
+    <div class="exchange-column">
+      <h2>🔼 Top 3 Highest Price (USDT Pairs)</h2>
+      <div id="highest-usdt-prices" class="price-list-container"><div class="center-message"><span class="loading-message">Loading...</span></div></div>
+    </div>
+    <div class="exchange-column">
+      <h2>🔽 Top 3 Lowest Price (USDT Pairs)</h2>
+      <div id="lowest-usdt-prices" class="price-list-container"><div class="center-message"><span class="loading-message">Loading...</span></div></div>
+    </div>
+  </div>
+
+  <div id="profit-loss-container">
+      <h2 id="calculator-title">📊 Arbitrage Calculator 📊</h2>
+      <div id="profitLossResult">Select a 'Buy' entry, then select a 'Sell' entry from any list.</div>
+      <button id="reset-selection-btn">Reset Selection</button>
+  </div>
+
+  <div id="exchange-list-container">
+    <h3 id="exchange-list-title">🌐 All Exchange Listings (by Volume)</h3>
+    <div id="exchange-list" class="price-list-container"><div class="center-message"><span class="loading-message">Loading...</span></div></div>
+  </div>
+
+<script>
+    // --- Constants and Config ---
+    const VS_CURRENCY = 'usd';
+    const PRICE_PRECISION = 8;
+    const MAX_TICKERS_TO_FETCH = 250;
+    const REFRESH_INTERVAL_MS = 120000;
+    const EXAMPLE_TAKER_FEE = 0.001;
+    const EXAMPLE_MAKER_FEE = 0.001;
+    const EXAMPLE_WITHDRAW_FEE = "50000 UNITS"; // Will be updated with coin symbol
+    const EXAMPLE_ORDER_BOOK = { bids: [[0.00001150, 100000000]], asks: [[0.00001151, 120000000]], timestamp: Date.now(), datetime: new Date().toISOString(), nonce: undefined, symbol: 'COIN/USDT' }; // Symbol updated later
+    const MIN_SEARCH_LENGTH = 2;
+
+    // --- CCXT Config ---
+    const CORS_PROXY_URL = 'YOUR_CORS_PROXY_URL/'; // !!!!! SET YOUR PROXY !!!!!
+    if (CORS_PROXY_URL === 'YOUR_CORS_PROXY_URL/') {
+        console.warn("WARNING: CORS_PROXY_URL is not set. CCXT fetches will likely fail.");
+        // Optionally disable CCXT features or show a persistent warning on the page
+    }
+
+    // --- DOM Elements ---
+    const refreshBtn = document.getElementById('refresh-btn');
+    const dashboardTitleEl = document.getElementById('dashboard-title');
+    const statsContainerEl = document.getElementById('stats-container');
+    const priceEl = document.getElementById('livePrice');
+    const capEl = document.getElementById('marketCap');
+    const supplyEl = document.getElementById('totalSupply');
+    const changeEl = document.getElementById('priceChange24h');
+    const highestPricesEl = document.getElementById('highest-prices');
+    const lowestPricesEl = document.getElementById('lowest-prices');
+    const highestUsdtPricesEl = document.getElementById('highest-usdt-prices');
+    const lowestUsdtPricesEl = document.getElementById('lowest-usdt-prices');
+    const exchangeListTitleEl = document.getElementById('exchange-list-title');
+    const exchangeListEl = document.getElementById('exchange-list');
+    const profitLossContainer = document.getElementById('profit-loss-container');
+    const calculatorTitleEl = document.getElementById('calculator-title');
+    const profitLossResultEl = document.getElementById('profitLossResult');
+    const resetSelectionBtn = document.getElementById('reset-selection-btn');
+    const priceListContainers = document.querySelectorAll('.price-list-container');
+    const coinSearchInput = document.getElementById('coin-search');
+    const coinSuggestionsDiv = document.getElementById('coin-suggestions');
+    const coinSelectorStatus = document.getElementById('coin-selector-status');
+
+    // --- State Variables ---
+    let currentCoinId = 'pepe'; // Default coin
+    let currentCoinSymbol = 'PEPE';
+    let currentCoinName = 'Pepe';
+    let isDataStale = false; // Flag to track if displayed data failed to refresh
+
+    let selectedBuyElement = null;
+    let selectedSellElement = null;
+    let buyData = null;
+    let sellData = null;
+    let autoRefreshTimer = null;
+    let ccxtExchanges = {}; // Cache for initialized CCXT instances
+    let searchAbortController = null; // To cancel ongoing fetch requests
+
+    // --- Debounced Search Handler ---
+    // Uses lodash debounce to limit API calls while typing
+    const debouncedSearchHandler = _.debounce(handleCoinSearchInput, 350);
+
+    // --- Formatting Functions ---
+    function formatPrice(price) { if (typeof price !== 'number' || isNaN(price)) return '--'; const precision = price < 0.00001 ? 8 : (price < 0.01 ? 6 : (price < 10 ? 4 : 2)); return '$' + price.toLocaleString('en-US', { minimumFractionDigits: precision, maximumFractionDigits: precision }); }
+    function formatLargeNumber(num) { if (typeof num !== 'number' || isNaN(num)) return '--'; return '$' + Math.round(num).toLocaleString('en-US'); }
+    function formatPercentage(num) { if (typeof num !== 'number' || isNaN(num)) return '--'; const color = num >= 0 ? '#4CAF50' : '#f44336'; const sign = num >= 0 ? '+' : ''; const displayNum = (num > -0.005 && num < 0) ? 0 : num; /* Treat very small negatives as 0 */ return `<span style="color:${color}; font-weight: bold;">${sign}${displayNum.toFixed(2)}%</span>`; }
+    function formatFee(fee, isExample = false) {
+         let formatted = '--';
+         if (typeof fee === 'number') { formatted = (fee * 100).toFixed(4) + '%'; }
+         else if (typeof fee === 'string' && !fee.toLowerCase().includes('null') && !fee.toLowerCase().includes('undefined')) { formatted = fee; }
+         if(isExample && formatted !== '--') { return `<span class="example-value" title="Example value - Verify on exchange">${formatted}*</span>`; }
+         else if (isExample) { return `<span class="example-value" title="Example value - Verify on exchange">--*</span>`; }
+         return formatted;
+    }
+
+    // --- UI Feedback ---
+    function displayError(element, message) { if (element) element.innerHTML = `<div class="center-message"><span class="error-message">${message || 'Error loading data.'}</span></div>`; }
+    function displayLoading(element, message = "Loading...") { if (element) element.innerHTML = `<div class="center-message"><span class="loading-message">${message}</span></div>`; }
+    // Helper to set status message in the coin selector area
+    function setCoinSelectorStatus(message, isError = false) {
+        if (coinSelectorStatus) { // Add safety check
+            coinSelectorStatus.textContent = message;
+            coinSelectorStatus.classList.toggle('error', isError);
+        }
+    }
+    // Function to update header staleness indicator
+    function updateStaleIndicator(stale) {
+        isDataStale = stale;
+        if (statsContainerEl) { // Safety check
+            statsContainerEl.classList.toggle('stale', stale);
+        }
+        // Optionally slightly change main title appearance too
+        if (dashboardTitleEl) { // Safety check
+            dashboardTitleEl.style.opacity = stale ? '0.8' : '1';
+        }
+    }
+
+    // --- CCXT Helpers & Fetch Functions ---
+    function getCcxtIdFromName(exchangeName) {
+        if (!exchangeName) return null;
+        const nameLower = exchangeName.toLowerCase().replace(/ /g, '');
+        // Simple mapping (add more as needed)
+        const mapping = { 'binance': 'binance', 'binanceus': 'binanceus', 'kucoin': 'kucoin', 'mexc': 'mexc', 'bybit': 'bybit', 'bybitus': 'bybitus', 'okx': 'okx', 'gateio': 'gateio', 'gate.io': 'gateio', 'bitget': 'bitget', 'bingx': 'bingx', 'coinbase': 'coinbase', 'coinbaseadvanced': 'coinbase', 'coinbasepro': 'coinbase', 'kraken': 'kraken', 'krakenfutures': 'kraken', 'htx': 'htx', 'huobi': 'htx', 'bitmart': 'bitmart', 'bitfinex': 'bitfinex', 'bitfinex2': 'bitfinex', 'crypto.com': 'cryptocom', 'cryptocomexchange': 'cryptocom', 'gemini': 'gemini', 'lbank': 'lbank' };
+        for (const key in mapping) {
+            if (nameLower.includes(key)) return mapping[key];
+        }
+        console.warn(`No CCXT ID mapped for: ${exchangeName}. Attempting direct match: ${nameLower}`);
+        // Fallback to direct match if no mapping found
+        return nameLower;
+    }
+    function getCcxtSymbol(pairString) { if (!pairString || !pairString.includes('/')) return null; return pairString.toUpperCase(); }
+    function getCcxtExchange(ccxtId) {
+         if (!ccxtId || typeof ccxt === 'undefined' || !ccxt[ccxtId]) { console.error(`CCXT ID "${ccxtId}" invalid/unloaded.`); return null; }
+        if (!ccxtExchanges[ccxtId]) {
+             if (CORS_PROXY_URL === 'YOUR_CORS_PROXY_URL/') { console.error("Cannot init CCXT: CORS_PROXY_URL not set."); return null; }
+             console.log(`Initializing CCXT for ${ccxtId} via proxy: ${CORS_PROXY_URL}`);
+             try {
+                 const opts = { 'proxy': CORS_PROXY_URL, 'fetchImplementation': fetch }; // Pass standard fetch
+                 ccxtExchanges[ccxtId] = new ccxt[ccxtId](opts);
+             } catch (error) {
+                 console.error(`Failed to initialize CCXT exchange ${ccxtId}:`, error);
+                 return null; // Return null if initialization fails
+             }
+        }
+        return ccxtExchanges[ccxtId];
+    }
+    async function fetchFees(ccxtId, symbol) {
+         const exchange = getCcxtExchange(ccxtId);
+         if (!exchange || !exchange.has || !exchange.has['fetchTradingFees']) {
+            console.warn(`fetchTradingFees not supported or exchange init failed for ${ccxtId}`);
+            return null;
+         }
+        try {
+            const fees = await exchange.fetchTradingFees();
+            // Try to find fees for the specific symbol first
+            const symbolFees = fees[symbol];
+            let result = null;
+            if (symbolFees && symbolFees.taker !== undefined && symbolFees.maker !== undefined) {
+                result = { maker: symbolFees.maker, taker: symbolFees.taker };
+            }
+            // Fallback to general info if symbol specific fees aren't there
+            else if (fees.info && fees.info.taker !== undefined && fees.info.maker !== undefined) {
+                 result = { maker: fees.info.maker, taker: fees.info.taker };
+                 console.log(`Used general info fees for ${ccxtId}/${symbol}`);
+            }
+             // Fallback to top-level fees if available
+             else if (fees.taker !== undefined && fees.maker !== undefined) {
+                 result = { maker: fees.maker, taker: fees.taker }; // Note: Might be 'taker' typo in original, assuming maker/taker
+                 console.log(`Used top-level fees for ${ccxtId}/${symbol}`);
+             }
+            return result;
+        } catch (error) {
+            console.error(`Error fetchFees ${ccxtId}(${symbol}):`, error.constructor.name, error.message);
+            return null; // Return null on error
+        }
+    }
+    async function fetchOrderBook(ccxtId, symbol) {
+        const exchange = getCcxtExchange(ccxtId);
+        const method = exchange?.has?.['fetchL2OrderBook'] ? 'fetchL2OrderBook' : (exchange?.has?.['fetchOrderBook'] ? 'fetchOrderBook' : null);
+        if (!exchange || !method) {
+            console.warn(`fetchOrderBook/fetchL2OrderBook not supported or exchange init failed for ${ccxtId}`);
+            return null;
+        }
+        try {
+            const ob = await exchange[method](symbol, 5); // Fetch limited depth (e.g., 5 levels)
+            // Basic validation
+            if (ob && Array.isArray(ob.bids) && Array.isArray(ob.asks)) {
+                return ob;
+            }
+            console.warn(`Invalid order book structure received from ${ccxtId}(${symbol})`);
+            return null;
+        } catch (error) {
+            console.error(`Error ${method} ${ccxtId}(${symbol}):`, error.constructor.name, error.message);
+            return null; // Return null on error
+        }
+    }
+    async function fetchWithdrawalFee(ccxtId, coinCode, network = null) {
+        const exchange = getCcxtExchange(ccxtId);
+        if (!exchange || !coinCode) return null;
+        const codeUpper = coinCode.toUpperCase();
+        try {
+            let feesData = null;
+            let methodUsed = '';
+
+            // Prefer combined endpoint if available
+            if (exchange.has?.['fetchDepositWithdrawFees']) {
+                 methodUsed = 'fetchDepositWithdrawFees';
+                 feesData = await exchange.fetchDepositWithdrawFees([codeUpper]); // Pass code in array if needed
+            } else if (exchange.has?.['fetchWithdrawFees']) { // Fallback to withdraw specific
+                 methodUsed = 'fetchWithdrawFees';
+                 feesData = await exchange.fetchWithdrawFees(codeUpper);
+            } else {
+                 console.warn(`No fee fetching method supported by ${ccxtId}`);
+                 return null;
+            }
+
+            if (!feesData) {
+                 console.warn(`No fee data returned by ${methodUsed} for ${codeUpper} on ${ccxtId}`);
+                 return null;
+             }
+
+            // CCXT structures can vary, try to extract fee info
+            let feeInfo = feesData[codeUpper]; // Common structure
+
+            // Handle potential variations if feesData isn't keyed by code
+            if (!feeInfo && typeof feesData === 'object' && Object.keys(feesData).length === 1) {
+                feeInfo = Object.values(feesData)[0]; // If only one key exists
+            } else if (!feeInfo && feesData.info) {
+                feeInfo = feesData; // Sometimes relevant info is directly on the object or its 'info'
+            }
+
+            if (!feeInfo) {
+                 console.warn(`Could not find fee info for ${codeUpper} within response from ${ccxtId}`);
+                 return null;
+             }
+
+            let networkFee = undefined;
+
+            // 1. Check 'networks' structure (most modern CCXT way)
+            if (feeInfo.networks) {
+                const preferredNets = [network?.toUpperCase(), 'ETH', 'ERC20', 'OPTIMISM', 'ARBITRUM', 'SOL', 'BSC', 'BEP20'].filter(Boolean); // Common networks
+                let foundNetData = null;
+                // Try preferred networks first
+                for(const net of preferredNets) {
+                    if(feeInfo.networks[net]) {
+                        foundNetData = feeInfo.networks[net];
+                        console.log(`Found fee for preferred network ${net} on ${ccxtId}`);
+                        break;
+                    }
+                }
+                // If no preferred network found, try the first available one
+                if (!foundNetData && Object.keys(feeInfo.networks).length > 0) {
+                    const firstNetKey = Object.keys(feeInfo.networks)[0];
+                    foundNetData = feeInfo.networks[firstNetKey];
+                    console.log(`Using first available network fee (${firstNetKey}) on ${ccxtId}`);
+                }
+                // Extract fee from network data
+                if (foundNetData && foundNetData.withdraw?.fee !== undefined) { networkFee = foundNetData.withdraw.fee; } // Standard path
+                else if (foundNetData && foundNetData.fee !== undefined) { networkFee = foundNetData.fee; } // Common fallback path
+                else if (foundNetData && foundNetData.info?.fee !== undefined) { networkFee = foundNetData.info.fee; } // Check raw info
+            }
+             // 2. Check top-level 'withdraw' structure
+             else if (feeInfo.withdraw?.fee !== undefined) { networkFee = feeInfo.withdraw.fee; }
+             // 3. Check top-level 'fee' structure (less common for withdraw)
+             else if (feeInfo.fee?.cost !== undefined) { networkFee = feeInfo.fee.cost; } // Some exchanges use 'cost'
+             else if (feeInfo.fee !== undefined && typeof feeInfo.fee === 'number') { networkFee = feeInfo.fee; } // Direct number fee
+             // 4. Check raw 'info' object for fee property
+             else if (feeInfo.info?.fee !== undefined) { networkFee = feeInfo.info.fee; }
+             // 5. Check direct cost property (e.g., older versions/specific exchanges)
+             else if (typeof feeInfo === 'object' && feeInfo.cost !== undefined) { networkFee = feeInfo.cost; }
+
+            // Format the fee if found
+            return networkFee !== undefined ? `${networkFee} ${codeUpper}` : null;
+
+        } catch (error) {
+            console.error(`Error ${methodUsed || 'fetchWithdrawFee'} ${ccxtId}(${codeUpper}):`, error.constructor.name, error.message);
+            return null; // Return null on error
+        }
+    }
+
+
+    // --- Coin Search Logic ---
+
+    // IMPROVED Error Handling & Specificity
+    async function fetchCoinSearchResults(query) {
+        if (searchAbortController) {
+            searchAbortController.abort();
+            console.log('Aborted previous search request.');
+        }
+        searchAbortController = new AbortController();
+        const signal = searchAbortController.signal;
+
+        try {
+            const response = await fetch(`https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(query)}`, { signal });
+
+            // Check if the request was aborted *during* the fetch
+            if (signal.aborted) {
+                 console.log('Search fetch aborted');
+                 return []; // Return empty array if aborted
+            }
+
+            if (!response.ok) {
+                let errorText = `Search API error (${response.status}).`;
+                if (response.status === 429) {
+                    // Specific message for rate limiting
+                    errorText = "Search rate limited. Please wait a moment.";
+                } else if (response.status >= 500) {
+                    errorText = "CoinGecko server error. Please try again later.";
+                }
+                // Throw the specific error message
+                throw new Error(errorText);
+            }
+
+            const data = await response.json();
+            return data.coins || []; // Return the coins array (or empty if none)
+
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                // This is expected if a new search starts quickly, no user error needed.
+                console.log('Search fetch aborted.');
+            } else {
+                // Log the actual error for debugging
+                console.error("Error fetching coin search results:", error);
+
+                // Determine the message to show the user
+                let displayMessage = error.message || "Search failed. Try again."; // Use specific message if available
+                // Check for generic network errors
+                if (displayMessage.toLowerCase().includes("failed to fetch")) {
+                     displayMessage = "Network error. Check connection.";
+                }
+
+                // Update the status span with the error
+                setCoinSelectorStatus(displayMessage, true);
+            }
+            return []; // Return empty array on error or abort
+        } finally {
+             // Clear the controller reference *only* if this fetch call owns it
+             if (signal === searchAbortController?.signal) {
+                 searchAbortController = null;
+             }
+        }
+    }
+
+    // IMPROVED Status Handling
+    async function handleCoinSearchInput() {
+        const query = coinSearchInput.value.trim();
+
+        // Clear previous non-error status messages. Keep error messages visible.
+        if (coinSelectorStatus && !coinSelectorStatus.classList.contains('error')) {
+             setCoinSelectorStatus("");
+        }
+
+        if (query.length < MIN_SEARCH_LENGTH) {
+            if (coinSuggestionsDiv) {
+                coinSuggestionsDiv.style.display = 'none';
+                coinSuggestionsDiv.innerHTML = '';
+            }
+            // Abort any ongoing search if user clears input or types less than min length
+            if (searchAbortController) {
+                searchAbortController.abort();
+                console.log('Aborted search due to input change/clear.');
+            }
+            return;
+        }
+
+        // --- Initiate Search ---
+        setCoinSelectorStatus("Searching..."); // Set status *before* await
+        displayCoinSuggestions([{ loading: true }]); // Show loading indicator in suggestions list
+
+        const results = await fetchCoinSearchResults(query);
+
+        // --- Handle Results ---
+        // Important: Check if the status is still "Searching..."
+        // If fetchCoinSearchResults encountered an error, it would have already set an error status.
+        // Only clear the status if the fetch completed without error.
+        if (coinSelectorStatus && coinSelectorStatus.textContent === "Searching...") {
+            setCoinSelectorStatus(""); // Clear "Searching..." message
+        }
+
+        // Only display results if the input *still* matches the query we searched for.
+        // This prevents showing outdated results if the user typed more while waiting.
+        if (coinSearchInput && coinSearchInput.value.trim() === query) {
+            displayCoinSuggestions(results);
+        } else {
+             // Input changed during fetch, hide the (now potentially irrelevant) suggestions list
+             if(coinSuggestionsDiv) {
+                 coinSuggestionsDiv.style.display = 'none';
+                 coinSuggestionsDiv.innerHTML = '';
+             }
+             console.log("Input changed during search fetch, hiding old suggestions.");
+        }
+    }
+
+    // Function to display suggestions (minor safety addition)
+    function displayCoinSuggestions(coins) {
+        if (!coinSuggestionsDiv) return; // Safety check
+
+        coinSuggestionsDiv.innerHTML = ''; // Clear previous suggestions
+
+        if (!coins || coins.length === 0) {
+            // Handle loading state or no results state
+            const li = document.createElement('li');
+            if (coins && coins[0]?.loading) {
+                li.className = 'suggestion-item loading';
+                li.textContent = 'Searching...';
+            } else {
+                li.className = 'suggestion-item no-results';
+                li.textContent = 'No coins found.';
+                 // Optionally clear status if no results found, but let's keep error messages if any
+                 if (coinSelectorStatus && coinSelectorStatus.textContent === "Searching...") {
+                    setCoinSelectorStatus("");
+                 }
+            }
+            coinSuggestionsDiv.appendChild(li);
+        } else {
+            // Populate suggestions
+            coins.slice(0, 15).forEach(coin => {
+                // Basic validation of coin data from search
+                if (!coin.id || !coin.name || !coin.symbol || !coin.thumb) {
+                    console.warn("Skipping incomplete coin data from search:", coin);
+                    return; // Skip this coin if essential data is missing
+                }
+                const li = document.createElement('li');
+                li.className = 'suggestion-item';
+                li.onclick = () => selectCoinSuggestion(coin); // Ensure selectCoinSuggestion exists
+                const img = document.createElement('img');
+                img.src = coin.thumb;
+                img.alt = coin.name;
+                img.onerror = function() { this.style.visibility='hidden'; }; // Hide if image fails to load
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'coin-name';
+                nameSpan.textContent = coin.name;
+                const symbolSpan = document.createElement('span');
+                symbolSpan.className = 'coin-symbol';
+                symbolSpan.textContent = `(${coin.symbol.toUpperCase()})`; // Ensure uppercase
+                li.appendChild(img);
+                li.appendChild(nameSpan);
+                li.appendChild(symbolSpan);
+                coinSuggestionsDiv.appendChild(li);
+            });
+        }
+        // Display the suggestions dropdown
+        coinSuggestionsDiv.style.display = 'block';
+    }
+
+    // Handles selecting a coin from the suggestion list
+    async function selectCoinSuggestion(coin) {
+        if (!coin || !coin.id || !coin.symbol || !coin.name) {
+            console.error("Invalid coin data passed to selectCoinSuggestion:", coin);
+            setCoinSelectorStatus("Error selecting coin.", true);
+            return;
+        }
+        const coinToLoad = { id: coin.id, symbol: coin.symbol, name: coin.name };
+        console.log("Selected suggestion, initiating load:", coinToLoad);
+
+        if (coinSearchInput) {
+            coinSearchInput.value = ''; // Clear search input
+            coinSearchInput.disabled = true; // Disable input during load
+            coinSearchInput.blur(); // Remove focus
+        }
+        if (coinSuggestionsDiv) {
+            coinSuggestionsDiv.style.display = 'none'; // Hide suggestions
+            coinSuggestionsDiv.innerHTML = '';
+        }
+        setCoinSelectorStatus(`Loading ${coinToLoad.name}...`); // Update status
+
+        // Update global state
+        currentCoinId = coinToLoad.id;
+        currentCoinSymbol = coinToLoad.symbol.toUpperCase();
+        currentCoinName = coinToLoad.name;
+
+        resetSelection(); // Reset calculator
+        clearTimeout(autoRefreshTimer); // Stop existing refresh timer
+
+        try {
+            await fetchCoinData(currentCoinId, false); // Fetch data for the new coin
+            // If fetchCoinData is successful, status will be cleared inside it
+            setCoinSelectorStatus(""); // Clear loading message on success
+        } catch (error) {
+            console.error("Error during fetchCoinData after selection:", error);
+            // Error message should already be displayed by fetchCoinData's catch block
+            // setCoinSelectorStatus might be already set to an error by fetchCoinData
+            if (coinSelectorStatus && !coinSelectorStatus.classList.contains('error')) {
+                 setCoinSelectorStatus(`Failed to load ${coinToLoad.name}.`, true);
+            }
+        } finally {
+             if (coinSearchInput) {
+                 coinSearchInput.disabled = false; // Re-enable input
+             }
+             // Do not clear error status here, let it persist
+             if (coinSelectorStatus && !coinSelectorStatus.classList.contains('error')) {
+                  setCoinSelectorStatus(""); // Ensure status is cleared if no error occurred
+             }
+        }
+    }
+
+
+    // --- Calculator Logic ---
+    function clearProfitLossDisplay() {
+        if (profitLossResultEl) {
+             profitLossResultEl.innerHTML = `<div>Select a 'Buy' entry, then select a 'Sell' entry from any list.</div>`;
+        }
+    }
+    function resetSelection() {
+        if (selectedBuyElement) selectedBuyElement.classList.remove('selected-buy');
+        if (selectedSellElement) selectedSellElement.classList.remove('selected-sell');
+        selectedBuyElement = null;
+        selectedSellElement = null;
+        buyData = null;
+        sellData = null;
+        if (profitLossResultEl) clearProfitLossDisplay();
+        if (profitLossContainer) profitLossContainer.style.display = 'none';
+        console.log("Calculator selection reset.");
+    }
+    // Renders the details in the calculator display
+    function displayCalculationResults() {
+        // Only show container if at least buy is selected
+        if (!buyData) {
+            if (profitLossContainer) profitLossContainer.style.display = 'none';
+            return;
+        }
+        if (profitLossContainer) profitLossContainer.style.display = 'block';
+
+        // Helper to render values (handles loading, null, example states)
+        const detailValue = (value, isExample = false, isFeeRate = false) => {
+            if (value === undefined) return `<span class="loading-spinner"></span>`; // Loading state
+            let displayVal = '--'; // Default placeholder
+            let title = isExample ? "Example value - Verify on exchange" : "Verify on exchange"; // Default title
+            if (value !== null) { // Value is not null (meaning not failed/unavailable)
+                if (isFeeRate && typeof value === 'number') { displayVal = formatFee(value); } // Format % if number
+                else if (typeof value === 'string' && !value.toLowerCase().includes('null') && !value.toLowerCase().includes('undefined')) { displayVal = value; } // Use valid string (like withdraw fee)
+                else if (typeof value === 'number' && !isFeeRate) { displayVal = value.toString(); } // Other numbers? Use as string
+                else if (typeof value === 'number' && isFeeRate && value === 0) { displayVal = formatFee(value); } // Handle 0% fee explicitly
+            }
+             // Adjust title if example failed too, or if value is explicitly '--'
+            if (displayVal === '--') {
+                title = isExample ? "Example value - Verify on exchange" : "Data unavailable";
+            }
+            return `<span class="${isExample ? 'example-value' : ''}" title="${title}">${displayVal}${isExample && displayVal !== '--' ? '*' : ''}</span>`; // Only add '*' if value is shown
+        };
+
+        // Helper to render order book visualization
+        const renderOrderBookViz = (orderBook, isExample = false, symbol) => {
+            let vizClass = "order-book-viz";
+            let vizStyle = "";
+            let textContent = `<div class="details-row"><span class="label">Liquidity:</span> <span class="value">${detailValue(orderBook, isExample)}</span></div>`; // Shows loading/placeholder/example initially
+
+            if (orderBook && orderBook.bids?.length > 0 && orderBook.asks?.length > 0) { // Real or Example OB data present
+                const bestBid = orderBook.bids[0][0]; const bestAsk = orderBook.asks[0][0];
+                const midPrice = (bestBid + bestAsk) / 2;
+                const totalSpread = bestAsk - bestBid;
+                const spreadPercent = midPrice > 0 ? (totalSpread / midPrice) * 100 : 0;
+                // Calculate value (depth * price) for bids and asks shown (limited depth)
+                const bidValue = orderBook.bids.reduce((sum, bid) => sum + (bid[0] * bid[1]), 0);
+                const askValue = orderBook.asks.reduce((sum, ask) => sum + (ask[0] * ask[1]), 0);
+                const totalValue = bidValue + askValue;
+                const bidRatio = totalValue > 0 ? Math.min(100, Math.max(0, (bidValue / totalValue) * 100)) : 50; // Ratio based on value
+                vizStyle = `background: linear-gradient(to right, #90ee90 ${bidRatio}%, #ffcccb ${bidRatio}%);`;
+                // Format spread text
+                const spreadText = `${formatPrice(bestBid)} - ${formatPrice(bestAsk)} (${spreadPercent.toFixed(2)}%)`; // Use fixed precision for spread %
+                const bidsShown = orderBook.bids.length;
+                const asksShown = orderBook.asks.length;
+                textContent = `<div class="details-row"><span class="label">Spread (${bidsShown}/${asksShown} Lvl):</span> <span class="value">${detailValue(spreadText, isExample)}</span></div>`; // Show levels fetched
+            } else if (orderBook === null || isExample) { // Failed fetch or forced example (even if example data is bad)
+                vizClass += " unavailable"; // Style bar grey
+                textContent = `<div class="details-row"><span class="label">Liquidity:</span> <span class="value">${detailValue(null, isExample)}</span></div>`; // Show placeholder/example*
+            } // If undefined (still loading), detailValue handles the spinner
+
+            // Determine the symbol to display (fetched OB symbol, pair symbol, or example)
+             const obSymbol = orderBook?.symbol ?? symbol ?? (isExample ? EXAMPLE_ORDER_BOOK.symbol.replace('COIN', currentCoinSymbol || 'UNITS') : 'N/A');
+             return `${textContent}<div class="${vizClass}" style="${vizStyle}" title="${isExample ? 'Example' : 'Live'} Order Book Depth (${obSymbol}) | Green: Bid Value, Red: Ask Value"></div>`;
+        };
+
+        // Generate example values using the current coin's symbol
+        const currentExampleWithdrawFee = EXAMPLE_WITHDRAW_FEE.replace('UNITS', currentCoinSymbol || 'UNITS');
+        const currentExampleOB = { ...EXAMPLE_ORDER_BOOK, symbol: EXAMPLE_ORDER_BOOK.symbol.replace('COIN', currentCoinSymbol || 'UNITS') };
+
+
+        // Build Buy Side HTML
+        let buySideHTML = `
+            <div style="flex: 1; min-width: 180px; padding: 0 5px; border-right: 1px dashed #ccc; margin-bottom: 10px;">
+                <div style="font-weight: bold; color: #4CAF50; margin-bottom: 5px;">BUY SIDE</div>
+                <div class="details-row"><span class="label">Exchange:</span> <span class="value">${buyData.name || '--'}</span></div>
+                <div class="details-row"><span class="label">Pair:</span> <span class="value">${buyData.pair || '--'}</span></div>
+                <div class="details-row"><span class="label">Price:</span> <span class="value">${formatPrice(buyData.price)}</span></div>
+                <div class="details-row"><span class="label">Fee (Taker%):</span> <span class="value">${detailValue(buyData.takerFee, buyData.isExampleFee, true)}</span></div>
+                <div class="details-row"><span class="label">Withdraw Fee:</span> <span class="value">${detailValue(buyData.withdrawFee, buyData.isExampleWithdrawFee)}</span></div>
+                ${renderOrderBookViz(buyData.orderBook, buyData.isExampleOB, buyData.symbol)}
+            </div>`;
+
+        // Build Sell Side HTML
+        let sellSideHTML = '';
+        if (sellData) {
+             sellSideHTML = `
+                <div style="flex: 1; min-width: 180px; padding: 0 5px; margin-bottom: 10px;">
+                     <div style="font-weight: bold; color: #f44336; margin-bottom: 5px;">SELL SIDE</div>
+                     <div class="details-row"><span class="label">Exchange:</span> <span class="value">${sellData.name || '--'}</span></div>
+                     <div class="details-row"><span class="label">Pair:</span> <span class="value">${sellData.pair || '--'}</span></div>
+                    <div class="details-row"><span class="label">Price:</span> <span class="value">${formatPrice(sellData.price)}</span></div>
+                    <div class="details-row"><span class="label">Fee (Maker%):</span> <span class="value">${detailValue(sellData.makerFee, sellData.isExampleFee, true)}</span></div>
+                     ${renderOrderBookViz(sellData.orderBook, sellData.isExampleOB, sellData.symbol)}
+                </div>`;
+        } else {
+            // Placeholder when only buy is selected
+            sellSideHTML = `<div style="flex: 1; min-width: 180px; padding: 0 5px; display: flex; align-items: center; justify-content: center; color: #888;">Select a 'Sell' entry...</div>`;
+        }
+
+        // Build Summary HTML (Potential Profit/Loss)
+        let summaryHTML = '';
+        if (buyData && sellData) {
+            const buyPrice = buyData.price;
+            const sellPrice = sellData.price;
+            // Check if prices are valid numbers
+             if (!isNaN(buyPrice) && !isNaN(sellPrice) && buyPrice > 0) {
+                 const profitLossUSD = sellPrice - buyPrice;
+                 const profitLossPercent = (profitLossUSD / buyPrice) * 100;
+                 const resultColor = profitLossUSD >= 0 ? '#4CAF50' : '#f44336'; // Green for profit, red for loss
+
+                 summaryHTML = `
+                    <hr style="border: 0; border-top: 1px solid #ddd; margin: 10px 0; width: 90%;">
+                    <div style="margin-top: 5px;">
+                         <strong style="color: ${resultColor}; font-size: 1.1em;">
+                            Potential Profit (Price Only): ${formatPrice(profitLossUSD)} (${formatPercentage(profitLossPercent)})
+                        </strong>
+                         <div class="summary-note">Note: Fees/liquidity marked with * are examples when real-time data failed. Always verify details on the exchange. Calculation ignores withdrawal fees & potential slippage.</div>
+                    </div>`;
+             } else {
+                 summaryHTML = `<div class="summary-note">Cannot calculate profit: Invalid price data.</div>`;
+             }
+        }
+
+        // Combine and render
+        if (profitLossResultEl) {
+            profitLossResultEl.innerHTML = `
+                <div style="display: flex; justify-content: space-around; width: 100%; flex-wrap: wrap;">
+                    ${buySideHTML}
+                    ${sellSideHTML}
+                </div>
+                ${summaryHTML}`;
+        }
+    }
+
+
+    // --- Click Handler for Price Entries ---
+    async function handleEntryClick(event) {
+        const clickedElement = event.target.closest('.clickable-price-entry');
+        // Validate the clicked element and its data
+        if (!clickedElement || !clickedElement.dataset.price || !clickedElement.dataset.name || !clickedElement.dataset.pair) {
+            console.log("Click on non-price entry or missing data.");
+            return;
+        }
+
+        const price = parseFloat(clickedElement.dataset.price);
+        const name = clickedElement.dataset.name;
+        const pair = clickedElement.dataset.pair;
+
+        if (isNaN(price)) {
+            console.warn("Invalid price data on clicked element:", clickedElement.dataset.price);
+            return;
+        }
+
+        // Get CCXT info
+        const ccxtId = getCcxtIdFromName(name);
+        const symbol = getCcxtSymbol(pair); // e.g., "BTC/USDT"
+
+        // Package data for the clicked entry
+        const cardData = { price, name, pair, element: clickedElement, ccxtId, symbol };
+
+        // Define current examples based on the loaded coin
+        const currentExampleWithdrawFee = EXAMPLE_WITHDRAW_FEE.replace('UNITS', currentCoinSymbol || 'UNITS');
+        const currentExampleOB = { ...EXAMPLE_ORDER_BOOK, symbol: EXAMPLE_ORDER_BOOK.symbol.replace('COIN', currentCoinSymbol || 'UNITS') };
+
+        let selectionChanged = false;
+        let fetchNeeded = false;
+
+        // --- Logic for selecting/deselecting buy/sell ---
+        if (selectedBuyElement === clickedElement) {
+            // Clicked on the selected Buy entry again: Deselect everything
+            resetSelection();
+            return; // Exit after reset
+        } else if (selectedSellElement === clickedElement) {
+            // Clicked on the selected Sell entry again: Deselect only Sell
+            selectedSellElement.classList.remove('selected-sell');
+            selectedSellElement = null;
+            sellData = null;
+            selectionChanged = true;
+            fetchNeeded = false; // No new fetches needed, just remove sell side
+        } else if (!selectedBuyElement) {
+            // No Buy selected yet: Select this as Buy
+            if (selectedSellElement) { // If a sell was mistakenly selected first, clear it
+                selectedSellElement.classList.remove('selected-sell');
+                selectedSellElement = null;
+                sellData = null;
+            }
+            selectedBuyElement = clickedElement;
+            buyData = cardData;
+            selectedBuyElement.classList.add('selected-buy');
+            selectionChanged = true;
+            fetchNeeded = true; // Need to fetch details for Buy
+        } else if (!selectedSellElement) {
+            // Buy is selected, no Sell selected yet: Select this as Sell
+            selectedSellElement = clickedElement;
+            sellData = cardData;
+            selectedSellElement.classList.add('selected-sell');
+            selectionChanged = true;
+            fetchNeeded = true; // Need to fetch details for Sell
+        } else {
+            // Both Buy and Sell are selected: Replace the Sell selection
+            selectedSellElement.classList.remove('selected-sell');
+            selectedSellElement = clickedElement;
+            sellData = cardData;
+            selectedSellElement.classList.add('selected-sell');
+            selectionChanged = true;
+            fetchNeeded = true; // Need to fetch details for the new Sell
+        }
+
+        // --- Display and Fetch Data ---
+        if (selectionChanged) {
+            displayCalculationResults(); // Update display immediately (shows placeholders/spinners)
+
+            if (fetchNeeded) {
+                console.log("Fetching CCXT details for selection (with fallbacks)...");
+                 const promises = [];
+
+                 // Initialize data structures with undefined and set example flags to false initially
+                 if (buyData) {
+                     buyData.takerFee = undefined; buyData.makerFee = undefined; buyData.orderBook = undefined; buyData.withdrawFee = undefined;
+                     buyData.isExampleFee = false; buyData.isExampleOB = false; buyData.isExampleWithdrawFee = false;
+                 }
+                 if (sellData) {
+                     sellData.takerFee = undefined; sellData.makerFee = undefined; sellData.orderBook = undefined;
+                     sellData.isExampleFee = false; sellData.isExampleOB = false;
+                     // No withdraw fee needed for sell side in this simple model
+                 }
+
+                 // Fetch for Buy side if selected and has necessary info
+                 if (buyData?.ccxtId && buyData?.symbol) {
+                     promises.push(fetchFees(buyData.ccxtId, buyData.symbol).then(fees => {
+                         if (buyData) { // Check if buyData still exists (user might have deselected quickly)
+                             if (fees !== null) {
+                                 buyData.takerFee = fees.taker;
+                                 buyData.makerFee = fees.maker; // Store maker too, although only taker shown
+                                 buyData.isExampleFee = false;
+                             } else {
+                                 buyData.takerFee = EXAMPLE_TAKER_FEE;
+                                 buyData.makerFee = EXAMPLE_MAKER_FEE;
+                                 buyData.isExampleFee = true;
+                             }
+                             displayCalculationResults(); // Update UI as data arrives
+                         }
+                     }));
+                     promises.push(fetchOrderBook(buyData.ccxtId, buyData.symbol).then(ob => {
+                         if (buyData) {
+                             buyData.orderBook = ob ?? currentExampleOB; // Use fetched OB or example
+                             buyData.isExampleOB = (ob === null); // Mark as example if fetch failed
+                             displayCalculationResults();
+                         }
+                     }));
+                     // Fetch withdrawal fee ONLY if sell side is also selected (it's relevant for the transfer)
+                     if (sellData && currentCoinSymbol) {
+                         promises.push(fetchWithdrawalFee(buyData.ccxtId, currentCoinSymbol).then(fee => {
+                             if (buyData) {
+                                 buyData.withdrawFee = fee ?? currentExampleWithdrawFee; // Use fetched fee or example
+                                 buyData.isExampleWithdrawFee = (fee === null); // Mark as example if fetch failed
+                                 displayCalculationResults();
+                             }
+                         }));
+                     } else if (buyData) {
+                          // Set withdraw fee placeholder if sell isn't selected yet
+                          buyData.withdrawFee = sellData ? "Loading..." : "Select Sell";
+                          buyData.isExampleWithdrawFee = false; // Not an example yet, just a placeholder
+                     }
+                 } else if (buyData) {
+                     // Fallback to examples immediately if CCXT ID/Symbol missing for Buy
+                     console.warn("Using example data for Buy side (missing CCXT info)");
+                     buyData.takerFee = EXAMPLE_TAKER_FEE; buyData.makerFee = EXAMPLE_MAKER_FEE; buyData.isExampleFee = true;
+                     buyData.orderBook = currentExampleOB; buyData.isExampleOB = true;
+                     buyData.withdrawFee = currentExampleWithdrawFee; buyData.isExampleWithdrawFee = true;
+                 }
+
+                 // Fetch for Sell side if selected and has necessary info
+                 if (sellData?.ccxtId && sellData?.symbol) {
+                     promises.push(fetchFees(sellData.ccxtId, sellData.symbol).then(fees => {
+                          if (sellData) { // Check if sellData still exists
+                             if (fees !== null) {
+                                 sellData.makerFee = fees.maker; // Use maker fee for selling
+                                 sellData.takerFee = fees.taker; // Store taker too
+                                 sellData.isExampleFee = false;
+                             } else {
+                                 sellData.makerFee = EXAMPLE_MAKER_FEE;
+                                 sellData.takerFee = EXAMPLE_TAKER_FEE;
+                                 sellData.isExampleFee = true;
+                             }
+                             displayCalculationResults();
+                         }
+                     }));
+                     promises.push(fetchOrderBook(sellData.ccxtId, sellData.symbol).then(ob => {
+                         if (sellData) {
+                             sellData.orderBook = ob ?? currentExampleOB;
+                             sellData.isExampleOB = (ob === null);
+                             displayCalculationResults();
+                         }
+                     }));
+                 } else if (sellData) {
+                      // Fallback to examples immediately if CCXT ID/Symbol missing for Sell
+                     console.warn("Using example data for Sell side (missing CCXT info)");
+                     sellData.takerFee = EXAMPLE_TAKER_FEE; sellData.makerFee = EXAMPLE_MAKER_FEE; sellData.isExampleFee = true;
+                     sellData.orderBook = currentExampleOB; sellData.isExampleOB = true;
+                 }
+
+                 // Update display again after setting initial undefined/example states
+                 displayCalculationResults();
+
+                 // Wait for all fetches to settle (complete or fail)
+                 try {
+                     await Promise.all(promises);
+                     console.log("CCXT detail fetching promises settled.");
+                 } catch (error) {
+                     // Errors within individual fetches are handled in their .then() blocks
+                     // This catch is for potential issues with Promise.all itself
+                     console.error("Error awaiting CCXT fetch promises:", error);
+                 }
+                 // Final update to ensure UI reflects all settled data
+                 displayCalculationResults();
+            }
+        }
+     }
+
+    // --- Setup Click Listeners ---
+    function setupClickListeners() {
+        // Remove existing listeners to prevent duplicates if called multiple times
+        priceListContainers.forEach(container => {
+            container.removeEventListener('click', handleEntryClick);
+            container.addEventListener('click', handleEntryClick);
+        });
+        if (resetSelectionBtn) {
+             resetSelectionBtn.removeEventListener('click', resetSelection);
+             resetSelectionBtn.addEventListener('click', resetSelection);
+        }
+        console.log("Click listeners (re)attached for price entries and reset button.");
+    }
+
+    // --- Rendering Functions for Price Lists ---
+    // Renders the small boxes for top/bottom price sections
+    function renderMiniSection(tickers, container) {
+        if (!container) { console.error("Container not found for mini section:", container?.id); return; }
+        if (!tickers || tickers.length === 0) {
+             container.innerHTML = '<div class="center-message">No data available.</div>';
+             return;
+        }
+        container.innerHTML = ''; // Clear previous content
+        tickers.forEach(t => {
+            const row = document.createElement('div');
+            row.className = `exchange-small clickable-price-entry`;
+            // Add data attributes for click handler
+            row.dataset.price = t.price;
+            row.dataset.name = t.name;
+            row.dataset.pair = `${t.base}/${t.target}`; // Store full pair
+
+            // Add visual indicators based on container ID
+            if (container.id.includes('highest')) row.classList.add(container.id.includes('usdt') ? 'usdt-highest' : 'highest');
+            if (container.id.includes('lowest')) row.classList.add(container.id.includes('usdt') ? 'usdt-lowest' : 'lowest');
+
+            const img = document.createElement('img');
+            img.src = t.logo;
+            img.alt = `${t.name} logo`;
+            img.onerror = function() { this.src='data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'; }; // Placeholder for broken image
+
+            const infoDiv = document.createElement('div');
+            infoDiv.className = 'info';
+            infoDiv.innerHTML = `<span class="exchange-name" title="${t.name}">${t.name}</span><span class="pair-price">${t.base}/${t.target}</span>`;
+
+            const priceDiv = document.createElement('div');
+            priceDiv.className = 'price-value';
+            priceDiv.textContent = formatPrice(t.price);
+
+            row.appendChild(img);
+            row.appendChild(infoDiv);
+            row.appendChild(priceDiv);
+            container.appendChild(row);
+        });
+    }
+    // Renders the grid of cards for all exchanges
+    function renderExchangeCards(tickers, container) {
+        if (!container) { console.error("Container not found for exchange cards:", container?.id); return; }
+        if (!tickers || tickers.length === 0) {
+            container.innerHTML = '<div class="center-message">No exchange data found.</div>';
+            return;
+        }
+        container.innerHTML = ''; // Clear previous content
+        tickers.forEach(t => {
+            const card = document.createElement('div');
+            card.className = 'exchange-card clickable-price-entry';
+            // Add data attributes for click handler
+            card.dataset.price = t.price;
+            card.dataset.name = t.name;
+            card.dataset.pair = `${t.base}/${t.target}`; // Store full pair
+
+            const logo = document.createElement('img');
+            logo.src = t.logo;
+            logo.alt = `${t.name} logo`;
+            logo.className = 'exchange-logo';
+            logo.onerror = function() { this.src='data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'; }; // Placeholder
+
+            const name = document.createElement('div');
+            name.className = 'exchange-name';
+            name.textContent = t.name;
+            name.title = t.name; // Tooltip for long names
+
+            const pair = document.createElement('div');
+            pair.className = 'pair';
+            pair.textContent = `${t.base}/${t.target}`;
+
+            const price = document.createElement('div');
+            price.className = 'price';
+            price.textContent = formatPrice(t.price);
+
+            card.appendChild(logo);
+            card.appendChild(name);
+            card.appendChild(pair);
+            card.appendChild(price);
+            container.appendChild(card);
+        });
+    }
+
+    // --- Main Data Fetching Function ---
+    // IMPROVED Error Handling & UI States
+    async function fetchCoinData(coinId, isAutoRefresh = false) {
+        console.log(`Fetching ${coinId} data... (Auto: ${isAutoRefresh})`);
+        if (refreshBtn) {
+            refreshBtn.disabled = true;
+            const iconSpan = refreshBtn.querySelector('.icon');
+            if (iconSpan) iconSpan.textContent = '⏳'; // Loading indicator
+        }
+
+        // Reset calculator only on manual load/refresh or coin change
+        if (!isAutoRefresh) {
+            resetSelection();
+        }
+
+        // Determine if we should show full loading indicators
+        // Show if it's not an auto-refresh OR if the main list area is currently empty/showing an error/loading message
+        const needsLoadingIndicator = !isAutoRefresh || !highestPricesEl || highestPricesEl.children.length <= 1 || highestPricesEl.querySelector('.center-message');
+
+        if (needsLoadingIndicator) {
+            updateStaleIndicator(false); // Clear stale indicator on manual load/full reload attempt
+            // Show loading messages in all data sections
+            displayLoading(highestPricesEl); displayLoading(lowestPricesEl);
+            displayLoading(highestUsdtPricesEl); displayLoading(lowestUsdtPricesEl);
+            displayLoading(exchangeListEl);
+            // Clear header stats and titles only if showing full loading (preserves old data on auto-refresh failure)
+            if (priceEl) priceEl.textContent = 'Price: Loading...';
+            if (capEl) capEl.textContent = 'Market Cap: Loading...';
+            if (supplyEl) supplyEl.textContent = 'Circ. Supply: Loading...';
+            if (changeEl) changeEl.textContent = '24h Change: Loading...';
+            if (dashboardTitleEl) dashboardTitleEl.textContent = `Loading ${currentCoinName || coinId}...`;
+            if (exchangeListTitleEl) exchangeListTitleEl.textContent = `🌐 All Exchange Listings for Loading... (by Volume)`;
+            if (calculatorTitleEl) calculatorTitleEl.textContent = `📊 Arbitrage Calculator 📊`;
+        }
+
+        // --- API Calls ---
+        try {
+            const coinApiUrl = `https://api.coingecko.com/api/v3/coins/${coinId}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=false`;
+            const tickerApiUrl = `https://api.coingecko.com/api/v3/coins/${coinId}/tickers?include_exchange_logo=true&order=volume_desc&depth=false&page=1&per_page=${MAX_TICKERS_TO_FETCH}`;
+
+            // Use Promise.allSettled to handle individual API call failures gracefully
+            const results = await Promise.allSettled([
+                fetch(coinApiUrl),
+                fetch(tickerApiUrl)
+            ]);
+
+            const coinDataResult = results[0];
+            const tickerDataResult = results[1];
+
+            // --- Process Coin Data ---
+            let coinData = null;
+            if (coinDataResult.status === 'fulfilled' && coinDataResult.value.ok) {
+                coinData = await coinDataResult.value.json();
+                // Update global state if successful
+                currentCoinId = coinData.id || currentCoinId; // Use fetched ID if available
+                currentCoinSymbol = coinData.symbol?.toUpperCase() || currentCoinSymbol;
+                currentCoinName = coinData.name || currentCoinName;
+            } else {
+                 // Handle coin data fetch failure
+                 const status = coinDataResult.status === 'fulfilled' ? coinDataResult.value.status : 'rejected';
+                 const reason = coinDataResult.status === 'rejected' ? coinDataResult.reason : `HTTP ${status}`;
+                 console.error(`Failed to fetch coin data for ${coinId}:`, reason);
+                 // Keep existing header info but mark as stale later if tickers also fail
+            }
+
+            // Update Titles (use potentially updated or existing names/symbols)
+            const coinSymbolUpper = currentCoinSymbol;
+            const coinName = currentCoinName;
+            if (dashboardTitleEl) dashboardTitleEl.innerHTML = `${coinData?.image?.thumb ? `<img src="${coinData.image.thumb}" alt="${coinName}">` : ''} ${coinName} ($${coinSymbolUpper}) Dashboard`;
+            if (exchangeListTitleEl) exchangeListTitleEl.textContent = `🌐 All Exchange Listings for $${coinSymbolUpper} (by Volume)`;
+            if (calculatorTitleEl) calculatorTitleEl.textContent = `📊 $${coinSymbolUpper} Arbitrage Calculator 📊`;
+
+            // Update Header Stats (only if coin data was successful)
+            if (coinData?.market_data) {
+                updateStaleIndicator(false); // Coin data is fresh, clear staleness for header
+                const marketData = coinData.market_data;
+                const currentPrice = marketData.current_price?.[VS_CURRENCY];
+                const marketCap = marketData.market_cap?.[VS_CURRENCY];
+                const circulatingSupply = marketData.circulating_supply;
+                const priceChange24h = marketData.price_change_percentage_24h_in_currency?.[VS_CURRENCY];
+
+                if (priceEl) priceEl.textContent = `Price: ${formatPrice(currentPrice)}`;
+                if (capEl) capEl.textContent = `Market Cap: ${formatLargeNumber(marketCap)}`;
+                if (supplyEl) supplyEl.textContent = `Circ. Supply: ${circulatingSupply ? Math.round(circulatingSupply).toLocaleString('en-US') + ' ' + coinSymbolUpper : '--'}`;
+                if (changeEl) changeEl.innerHTML = `24h Change: ${formatPercentage(priceChange24h)}`;
+            } else if (!isDataStale) {
+                // If coin data failed but data wasn't already stale, keep old header data but mark stale.
+                // If it was already stale, leave it as is.
+                updateStaleIndicator(true);
+                console.warn("Using potentially stale header data as coin data fetch failed.");
+            }
+
+            // --- Process Ticker Data ---
+            let tickerData = null;
+            if (tickerDataResult.status === 'fulfilled' && tickerDataResult.value.ok) {
+                tickerData = await tickerDataResult.value.json();
+            } else {
+                const status = tickerDataResult.status === 'fulfilled' ? tickerDataResult.value.status : 'rejected';
+                const reason = tickerDataResult.status === 'rejected' ? tickerDataResult.reason : `HTTP ${status}`;
+                console.error(`Failed to fetch ticker data for ${coinId}:`, reason);
+                // If tickers failed, display error messages in the ticker sections
+                const errorMsg = `Could not load exchange data for ${coinName}. Retrying soon.`;
+                displayError(highestPricesEl, errorMsg);
+                displayError(lowestPricesEl, ''); // Don't repeat message
+                displayError(highestUsdtPricesEl, errorMsg);
+                displayError(lowestUsdtPricesEl, '');
+                displayError(exchangeListEl, '');
+                updateStaleIndicator(true); // Mark overall data as stale if tickers failed
+                throw new Error(`Ticker data fetch failed: ${reason}`); // Throw to trigger finally block correctly and potentially outer catch
+            }
+
+            // ---- Data Processing & UI Update for Tickers ----
+            if (!tickerData?.tickers?.length) {
+                 const noTickerMsg = `No exchange ticker data found for ${coinName}.`;
+                 displayError(highestPricesEl, noTickerMsg); displayError(lowestPricesEl, '');
+                 displayError(highestUsdtPricesEl, noTickerMsg); displayError(lowestUsdtPricesEl, '');
+                 displayError(exchangeListEl, noTickerMsg);
+                 updateStaleIndicator(true); // No tickers means data is effectively stale/incomplete
+            } else {
+                 // Filter and map tickers
+                 const validTickers = tickerData.tickers
+                    .filter(t => t.converted_last?.[VS_CURRENCY] > 0 && t.market?.name && t.base && t.target && t.market.has_trading_incentive === false /* Exclude incentivized pairs */)
+                    .map(t => ({
+                        name: t.market.name,
+                        logo: t.market.logo || 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', // Default placeholder
+                        price: t.converted_last[VS_CURRENCY],
+                        base: t.base,
+                        target: t.target
+                    }));
+
+                if (validTickers.length === 0) {
+                     const noValidTickerMsg = `No valid ${VS_CURRENCY.toUpperCase()} exchange tickers found for ${coinName}.`;
+                     displayError(highestPricesEl, noValidTickerMsg); displayError(lowestPricesEl, '');
+                     displayError(highestUsdtPricesEl, noValidTickerMsg); displayError(lowestUsdtPricesEl, '');
+                     displayError(exchangeListEl, noValidTickerMsg);
+                     updateStaleIndicator(true); // No valid tickers means stale/incomplete
+                 } else {
+                    // Ticker data is valid and processed, ensure stale indicator is off
+                    updateStaleIndicator(false);
+
+                    // Render Top/Bottom All Pairs
+                    renderMiniSection([...validTickers].sort((a, b) => b.price - a.price).slice(0, 5), highestPricesEl);
+                    renderMiniSection([...validTickers].sort((a, b) => a.price - b.price).slice(0, 5), lowestPricesEl);
+
+                    // Render Top/Bottom USDT Pairs
+                    const usdtTickers = validTickers.filter(t => t.target.toUpperCase() === 'USDT');
+                    if (usdtTickers.length > 0) {
+                        renderMiniSection([...usdtTickers].sort((a, b) => b.price - a.price).slice(0, 3), highestUsdtPricesEl);
+                        renderMiniSection([...usdtTickers].sort((a, b) => a.price - b.price).slice(0, 3), lowestUsdtPricesEl);
+                    } else {
+                        displayError(highestUsdtPricesEl, 'No USDT pairs found.'); displayError(lowestUsdtPricesEl, '');
+                    }
+
+                    // Render Full Exchange List
+                    renderExchangeCards(validTickers, exchangeListEl); // Already sorted by volume from API
+
+                    // --- Update Calculator Prices if Selections Exist ---
+                    let priceUpdated = false;
+                    if (selectedBuyElement && buyData) {
+                        const updatedBuy = validTickers.find(t => t.name === buyData.name && `${t.base}/${t.target}` === buyData.pair);
+                        if(updatedBuy && buyData.price !== updatedBuy.price) {
+                            console.log(`Updating buy price for ${buyData.name}/${buyData.pair} from ${buyData.price} to ${updatedBuy.price}`);
+                            buyData.price = updatedBuy.price;
+                            const priceDisplay = selectedBuyElement.querySelector('.price, .price-value'); // Query both possible classes
+                            if(priceDisplay) priceDisplay.textContent = formatPrice(updatedBuy.price);
+                            selectedBuyElement.dataset.price = updatedBuy.price; // Update dataset too
+                            priceUpdated = true;
+                        }
+                    }
+                    if (selectedSellElement && sellData) {
+                        const updatedSell = validTickers.find(t => t.name === sellData.name && `${t.base}/${t.target}` === sellData.pair);
+                        if(updatedSell && sellData.price !== updatedSell.price) {
+                            console.log(`Updating sell price for ${sellData.name}/${sellData.pair} from ${sellData.price} to ${updatedSell.price}`);
+                            sellData.price = updatedSell.price;
+                            const priceDisplay = selectedSellElement.querySelector('.price, .price-value');
+                            if(priceDisplay) priceDisplay.textContent = formatPrice(updatedSell.price);
+                            selectedSellElement.dataset.price = updatedSell.price; // Update dataset too
+                            priceUpdated = true;
+                        }
+                    }
+                    // If prices were updated in the calculator, re-render it
+                    if (buyData && sellData && priceUpdated) {
+                        console.log("Recalculating profit/loss due to price updates.");
+                        displayCalculationResults();
+                    }
+
+                    // Setup click listeners only on initial load or when full indicators were shown
+                    // This prevents re-attaching listeners unnecessarily on every auto-refresh
+                    if (needsLoadingIndicator) {
+                        setupClickListeners();
+                    }
+                 }
+            }
+            // ---- End Ticker Processing ----
+
+        } catch (err) {
+            // --- GRACEFUL ERROR HANDLING for overall process ---
+            console.error(`Error during fetchCoinData process for ${coinId}:`, err);
+            updateStaleIndicator(true); // Mark data as potentially stale
+
+            // Construct a user-friendly message ONLY if not already displayed by ticker failure block
+            if (!highestPricesEl?.querySelector('.error-message')) {
+                let errorMsg = `Could not update ${currentCoinName || coinId} data. `;
+                if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
+                    errorMsg += "Network error. Check connection.";
+                } else if (err.message.includes("unavailable") || err.message.includes("HTTP")) {
+                    errorMsg += "API data unavailable."; // Use the message from API check/fetch failure
+                } else {
+                    errorMsg += "An error occurred."; // Generic fallback
+                }
+                errorMsg += " Retrying soon."
+
+                // Display error only in the data sections, keep header stats as they were (stale)
+                displayError(highestPricesEl, errorMsg);
+                displayError(lowestPricesEl, ''); // Don't repeat message everywhere
+                displayError(highestUsdtPricesEl, errorMsg);
+                displayError(lowestUsdtPricesEl, '');
+                displayError(exchangeListEl, '');
+            }
+
+             // Update titles to reflect error subtly if not already showing Loading...
+             if (dashboardTitleEl && !dashboardTitleEl.textContent.includes("Loading")) dashboardTitleEl.textContent += " (Update Failed)";
+             if (exchangeListTitleEl && !exchangeListTitleEl.textContent.includes("Loading")) exchangeListTitleEl.textContent = `🌐 Exchange Listings (Update Failed)`;
+             if (calculatorTitleEl && !calculatorTitleEl.textContent.includes("Loading")) calculatorTitleEl.textContent = `📊 Calculator (Update Failed)`;
+
+            // Reset calculator selection as data is unreliable
+            resetSelection();
+
+            // Re-throw error so selectCoinSuggestion's finally block knows it failed
+             throw err; // Propagate error
+        } finally {
+            if (refreshBtn) {
+                refreshBtn.disabled = false;
+                const iconSpan = refreshBtn.querySelector('.icon');
+                if (iconSpan) iconSpan.textContent = '🔁'; // Reset icon
+            }
+            console.log(`Fetch cycle complete for ${coinId}. Stale: ${isDataStale}`);
+            // Set timeout for the next refresh
+            clearTimeout(autoRefreshTimer); // Clear any existing timer
+            autoRefreshTimer = setTimeout(() => fetchCoinData(currentCoinId, true), REFRESH_INTERVAL_MS);
+            console.log(`Next auto-refresh scheduled in ${REFRESH_INTERVAL_MS / 1000}s for ${currentCoinId}`);
+        }
+     }
+
+    // --- Initial Load & Event Listeners Setup ---
+    document.addEventListener('DOMContentLoaded', () => {
+        console.log("DOM loaded. Initializing dashboard.");
+
+        // Coin Search Listener
+        if (coinSearchInput) {
+            coinSearchInput.addEventListener('input', debouncedSearchHandler);
+            // Add ESC key listener to search input
+            coinSearchInput.addEventListener('keydown', (event) => {
+                if (event.key === "Escape") {
+                    if (coinSuggestionsDiv) { // Safety check
+                        coinSuggestionsDiv.style.display = 'none';
+                        coinSuggestionsDiv.innerHTML = '';
+                    }
+                }
+            });
+        } else {
+            console.error("Coin search input element (#coin-search) not found!");
+        }
+
+        // Click outside listener for suggestions
+        document.addEventListener('click', (event) => {
+             const wrapper = document.getElementById('coin-search-wrapper');
+             // Check if suggestions div exists and if click was outside wrapper and not on the input itself
+             if (coinSuggestionsDiv && wrapper && !wrapper.contains(event.target) && event.target !== coinSearchInput) {
+                 coinSuggestionsDiv.style.display = 'none';
+             }
+        });
+
+        // Initial data load for the default coin
+        fetchCoinData(currentCoinId, false).catch(err => {
+            console.error("Initial data load failed:", err);
+            // Error should be visually handled within fetchCoinData's catch/finally blocks
+        });
+    });
+
+    // Handle page visibility changes to pause/resume auto-refresh
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            clearTimeout(autoRefreshTimer);
+            console.log("Page hidden, auto-refresh paused.");
+        } else {
+            console.log(`Page visible, restarting auto-refresh cycle immediately for ${currentCoinId}`);
+            clearTimeout(autoRefreshTimer); // Clear any potentially lingering timer
+            fetchCoinData(currentCoinId, true).catch(err => { // Run immediately on becoming visible (as auto-refresh)
+                 console.error("Auto-refresh failed on visibility regain:", err);
+            });
+        }
+    });
+
+</script>
+
+</body>
+</html>
