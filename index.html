@@ -277,6 +277,46 @@
     body.dark-mode #profitLossResult span[style*="color:#4CAF50"] { color: #6ee7b7 !important; }
     body.dark-mode #profitLossResult span[style*="color:#f44336"] { color: #ff8a80 !important; }
 
+    /* --- New Section Styles --- */
+    .token-info-section {
+        background-color: rgba(0, 0, 0, 0.1); /* Slightly dark background */
+        padding: 20px;
+        margin: 30px 15px;
+        border-radius: 8px;
+        text-align: center;
+        font-size: 1.1em;
+        line-height: 1.6;
+        border: 1px solid var(--section-col-header-border);
+        color: var(--text-color); /* Inherit text color */
+        animation: pulse-border 2s infinite; /* Animation */
+    }
+    .token-info-section p {
+        margin: 5px 0;
+    }
+    .token-info-section .emojis {
+        font-size: 1.5em; /* Make emojis larger */
+        margin-top: 10px;
+    }
+
+    /* Animation for the new section border */
+    @keyframes pulse-border {
+        0% { border-color: var(--section-col-header-border); box-shadow: 0 0 3px var(--section-col-header-border); }
+        50% { border-color: var(--button-hover-bg); box-shadow: 0 0 10px var(--button-hover-bg); }
+        100% { border-color: var(--section-col-header-border); box-shadow: 0 0 3px var(--section-col-header-border); }
+    }
+
+    /* Dark mode adaptation for the new section */
+    body.dark-mode .token-info-section {
+        background-color: rgba(255, 255, 255, 0.05); /* Slightly light background in dark mode */
+        border-color: var(--section-col-header-border); /* Use dark mode border color */
+        animation-name: pulse-border-dark; /* Use dark mode animation if needed, or adjust pulse-border */
+    }
+    /* Optional separate dark mode animation if needed */
+    @keyframes pulse-border-dark {
+        0% { border-color: var(--section-col-header-border); box-shadow: 0 0 3px var(--section-col-header-border); }
+        50% { border-color: var(--button-hover-bg); box-shadow: 0 0 10px var(--button-hover-bg); }
+        100% { border-color: var(--section-col-header-border); box-shadow: 0 0 3px var(--section-col-header-border); }
+    }
 
     /* Media Queries - No changes needed here unless layout breaks in dark mode */
     @media (max-width: 900px) { .exchange-column { max-width: 48%; } }
@@ -299,7 +339,6 @@
 </head>
 <body>
 
-  <!-- Coin Selector Section -->
   <div id="coin-selector-container">
     <label for="coin-search">Coin:</label>
     <div id="coin-search-wrapper">
@@ -311,7 +350,6 @@
 
   <header>
     <h1 id="dashboard-title">Loading Dashboard...</h1>
-    <!-- Added stats-container ID -->
     <div id="stats-container" class="stats">
       <div id="livePrice">Price: Loading...</div>
       <div id="marketCap">Market Cap: Loading...</div>
@@ -320,12 +358,10 @@
     </div>
   </header>
 
-  <!-- NEW Controls Container -->
   <div class="controls-container">
       <button id="refresh-btn" onclick="fetchCoinData(currentCoinId, false)">
           <span class="icon">🔁</span> Refresh Now
       </button>
-      <!-- NEW Theme Switch -->
       <div class="theme-switch-wrapper">
           <label class="theme-switch" for="theme-checkbox" title="Toggle Dark Mode">
               <input type="checkbox" id="theme-checkbox" />
@@ -336,7 +372,6 @@
   </div>
 
 
-  <!-- Rest of the body structure remains the same -->
   <div class="section">
     <div class="exchange-column">
       <h2>🔼 Top 5 Highest Price (All Pairs)</h2>
@@ -508,7 +543,7 @@
     async function fetchFees(ccxtId, symbol) {
          const exchange = getCcxtExchange(ccxtId);
          if (!exchange || !exchange.has || !exchange.has['fetchTradingFees']) {
-            console.warn(`fetchTradingFees not supported or exchange init failed for ${ccxtId}`);
+            console.warn(`WorkspaceTradingFees not supported or exchange init failed for ${ccxtId}`);
             return null;
          }
         try {
@@ -539,7 +574,7 @@
         const exchange = getCcxtExchange(ccxtId);
         const method = exchange?.has?.['fetchL2OrderBook'] ? 'fetchL2OrderBook' : (exchange?.has?.['fetchOrderBook'] ? 'fetchOrderBook' : null);
         if (!exchange || !method) {
-            console.warn(`fetchOrderBook/fetchL2OrderBook not supported or exchange init failed for ${ccxtId}`);
+            console.warn(`WorkspaceOrderBook/fetchL2OrderBook not supported or exchange init failed for ${ccxtId}`);
             return null;
         }
         try {
@@ -1275,7 +1310,7 @@
 
     // --- Main Data Fetching Function ---
     async function fetchCoinData(coinId, isAutoRefresh = false) {
-        console.log(`Fetching ${coinId} data... (Auto: ${isAutoRefresh})`);
+        console.log(`Workspaceing ${coinId} data... (Auto: ${isAutoRefresh})`);
         if (refreshBtn) {
             refreshBtn.disabled = true;
             const iconSpan = refreshBtn.querySelector('.icon');
@@ -1510,7 +1545,7 @@
                 const iconSpan = refreshBtn.querySelector('.icon');
                 if (iconSpan) iconSpan.textContent = '🔁'; // Reset icon
             }
-            console.log(`Fetch cycle complete for ${coinId}. Stale: ${isDataStale}`);
+            console.log(`Workspace cycle complete for ${coinId}. Stale: ${isDataStale}`);
             // Set timeout for the next refresh only if page is not hidden
             if(!document.hidden) {
                 clearTimeout(autoRefreshTimer); // Clear any existing timer
@@ -1650,6 +1685,15 @@
     }
 
 </script>
+
+  <section class="token-info-section">
+      <p>Check out our <strong>frist_level</strong> token, now trading on the pump.fun DEX!</p>
+      <p>All fees earned from the DEX will be used to fund future development and enhancements.</p>
+      <p class="emojis">📈 🚀 🌕</p>
+      <p>next step add api key section to complte order no need to buy sell manualy all future see 
+        add our website just need our support go and buy frist_level token
+      </p>
+  </section>
 
 </body>
 </html>
